@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - LOG_LEVEL=info
+      - ETH_RPC_ENDPOINT=${ETH_RPC_ENDPOINT}
+      - ETH_WS_ENDPOINT=${ETH_WS_ENDPOINT}
+      - REQUEST_TIMEOUT=30s
+      - MAX_RETRY_ATTEMPTS=3
+      - RETRY_DELAY=1s
+      - CACHE_TTL=5m
+      - CACHE_MAX_SIZE=1000
+      - MAX_CONCURRENT_REQUESTS=10
+      - METRICS_ENABLED=true
+      - TRACING_ENABLED=false
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - eth-validator-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - eth-validator-network
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - eth-validator-network
+    depends_on:
+      - prometheus
+
+networks:
+  eth-validator-network:
+    driver: bridge
+
+volumes:
+  prometheus_data:
+  grafana_data:
